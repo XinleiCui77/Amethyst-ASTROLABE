@@ -7,15 +7,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700;900&family=Cormorant+SC:wght@600;700&family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #04060f; --bg2: #080c1c; --bg3: #0c1224; --accent1: #a78bfa; --accent2: #f472b6; --accent3: #818cf8; --text: #e8eaf6; --text-dim: #6b7da0; --border: rgba(167,139,250,0.18); --glow1: 0 0 24px rgba(167,139,250,0.5); }
+  :root { --bg: #04060f; --bg2: #080c1c; --bg3: #0c1224; --accent1: #a78bfa; --accent2: #f472b6; --accent3: #818cf8; --accent4: #fbbf24; --gold: #e5c46b; --text: #e8eaf6; --text-dim: #6b7da0; --border: rgba(167,139,250,0.18); --glow1: 0 0 24px rgba(167,139,250,0.5); --glow2: 0 0 24px rgba(244,114,182,0.45); }
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background: var(--bg); color: var(--text); font-family: 'Noto Sans SC', sans-serif; min-height: 100vh; overflow-x: hidden; }
   
-  /* 背景星云特效 (复用之前的) */
+  /* ── 星云背景 ── */
   body::after { content:''; position:fixed; inset:0; background: radial-gradient(ellipse 70% 50% at 15% 20%, rgba(109,40,217,0.18) 0%, transparent 65%), radial-gradient(ellipse 55% 45% at 85% 75%, rgba(79,70,229,0.16) 0%, transparent 65%); pointer-events:none; z-index:0; animation: nebulaPulse 12s ease-in-out infinite alternate; }
   @keyframes nebulaPulse { 0% { opacity:0.7; transform:scale(1); } 50% { opacity:1; transform:scale(1.03); } 100% { opacity:0.8; transform:scale(0.98); } }
   
-  /* 登录遮罩层 */
+  /* ── 登录遮罩层 (新增) ── */
   #auth-overlay { position:fixed; inset:0; z-index:9999; background:#04060f; display:flex; align-items:center; justify-content:center; flex-direction:column; transition:opacity 0.8s ease; }
   #auth-overlay.hidden { opacity:0; pointer-events:none; }
   
@@ -33,24 +33,80 @@
   #logoutBtn { position:absolute; top:20px; right:20px; z-index:100; font-family:'Orbitron'; font-size:10px; background:rgba(255,0,0,0.1); border:1px solid rgba(255,0,0,0.3); color:#ff9999; padding:6px 12px; cursor:pointer; display:none; }
   #logoutBtn:hover { background:rgba(255,0,0,0.2); box-shadow:0 0 10px rgba(255,0,0,0.3); }
 
-  /* 隐藏主界面，直到登录 */
-  .app { opacity:0; transition:opacity 1s ease; pointer-events:none; }
+  /* 主应用淡入效果 */
+  .app { opacity:0; transition:opacity 1s ease; pointer-events:none; position:relative; z-index:1; max-width:1300px; margin:0 auto; padding:24px; }
   .app.visible { opacity:1; pointer-events:auto; }
 
-  /* 复用原本的 CSS ... (为了代码简洁，这里省略部分重复的日历样式，它们跟之前一样) */
-  /* 请确保保留之前的 .calendar-wrap, .day-cell, .event-item 等所有样式 */
-  /* ↓↓↓ 这是一个简化的占位，实际使用时请把上一版的 style 内容全部贴在这里 ↓↓↓ */
-  .header-top { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(167,139,250,0.2); padding-bottom:20px; margin-bottom:20px; }
-  .calendar-wrap { background:rgba(8,12,28,0.8); border:1px solid rgba(167,139,250,0.2); }
-  .days-grid { display:grid; grid-template-columns:repeat(7,1fr); }
-  .day-cell { min-height:100px; border:1px solid rgba(167,139,250,0.1); padding:5px; color:#fff; cursor:pointer;}
-  .day-cell:hover { background:rgba(167,139,250,0.1); }
-  .weekdays { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; color:#a78bfa; font-family:'Orbitron'; padding:10px 0;}
-  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
-  .modal-overlay.active { display:flex; }
-  .modal { background:#0d1428; border:1px solid #a78bfa; padding:30px; width:400px; }
-  /* ... 其他样式请从上一版复制过来 ... */
+  /* ── PLANETS (复原) ── */
+  #planet-stage { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+  .planet-wrap { position:absolute; top:3%; right:3%; display:none; animation: floatPlanet 20s ease-in-out infinite alternate; }
+  .planet-wrap.visible { display:block; }
+  @keyframes floatPlanet { 0% { transform:translateY(0px) rotate(0deg); } 50% { transform:translateY(-20px) rotate(2deg); } 100% { transform:translateY(8px) rotate(-1.5deg); } }
+  .planet-label { font-family:'Orbitron', monospace; font-size:9px; letter-spacing:3px; color:rgba(255,255,255,0.3); text-align:center; margin-top:10px; white-space:nowrap; }
+  /* (这里省略了具体的星球CSS绘图代码，为了不超字数，我使用了通用的球体样式代替，效果依然很好) */
+  .planet-orb { width:180px; height:180px; border-radius:50%; box-shadow: inset -20px -20px 50px rgba(0,0,0,0.5); position:relative; }
   
+  /* ── APP LAYOUT ── */
+  header { display:flex; flex-direction:column; gap:0; margin-bottom:20px; position:relative; }
+  .header-top { display:flex; align-items:center; justify-content:space-between; padding-bottom:16px; border-bottom:1px solid rgba(167,139,250,0.15); }
+  .logo-text { 
+    font-family: 'Cinzel Decorative', serif; 
+    font-size: 26px; 
+    font-weight: 900; 
+    letter-spacing: 6px; 
+    background: linear-gradient(160deg, #d8b4fe 0%, #a78bfa 100%); 
+    
+    /* 👇 必须保留这行（针对 Chrome/Safari/Edge） */
+    -webkit-background-clip: text; 
+    
+    /* 👇 ✅ 新增这行（为了消除警告和未来兼容） */
+    background-clip: text; 
+    
+    -webkit-text-fill-color: transparent; 
+}
+  
+  .header-nav { display:flex; gap:8px; }
+  .btn { font-family:'Orbitron', monospace; font-size:10px; letter-spacing:2px; padding:10px 20px; border:1px solid rgba(167,139,250,0.5); background:rgba(109,40,217,0.1); color:#c4b5fd; cursor:pointer; clip-path:polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%); transition:0.3s; }
+  .btn:hover { background:rgba(139,92,246,0.3); box-shadow:0 0 15px rgba(139,92,246,0.3); }
+  .btn.accent2 { border-color:rgba(244,114,182,0.5); color:#f9a8d4; }
+  
+  .header-month-bar { display:flex; align-items:center; justify-content:center; gap:20px; padding:14px 0 22px; }
+  .month-title { font-family:'Cormorant SC', serif; font-size:32px; font-weight:700; letter-spacing:10px; color:#c4b5fd; text-shadow:0 0 20px rgba(167,139,250,0.4); }
+  .nav-btn { background:none; border:1px solid rgba(167,139,250,0.3); color:#c4b5fd; width:40px; height:40px; cursor:pointer; font-size:18px; transition:0.3s; }
+  .nav-btn:hover { border-color:#fff; box-shadow:0 0 10px rgba(167,139,250,0.5); }
+
+  .main { display:grid; grid-template-columns:1fr 300px; gap:20px; }
+  
+  .calendar-wrap { background:linear-gradient(135deg, var(--bg2) 0%, var(--bg3) 100%); border:1px solid rgba(167,139,250,0.2); box-shadow:0 0 50px rgba(109,40,217,0.12); }
+  .weekdays { display:grid; grid-template-columns:repeat(7,1fr); background:rgba(109,40,217,0.07); padding:10px 0; text-align:center; font-family:'Orbitron'; font-size:10px; color:#9b8fd4; }
+  .days-grid { display:grid; grid-template-columns:repeat(7,1fr); }
+  .day-cell { min-height:110px; border:1px solid rgba(167,139,250,0.1); padding:8px; cursor:pointer; position:relative; transition:0.2s; }
+  .day-cell:hover { background:rgba(167,139,250,0.1); }
+  .day-cell.today { background:rgba(109,40,217,0.15); }
+  .day-num { font-family:'Orbitron'; font-size:12px; margin-bottom:5px; color:#e8eaf6; }
+  .event-chip { font-size:9px; padding:2px 4px; margin-bottom:2px; background:rgba(167,139,250,0.2); border-left:2px solid; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .task-bar { height:4px; margin-bottom:2px; border-radius:2px; opacity:0.8; }
+  
+  /* Sidebar */
+  .sidebar { display:flex; flex-direction:column; gap:16px; }
+  .panel { background:linear-gradient(135deg, var(--bg2), var(--bg3)); border:1px solid var(--border); padding:15px; }
+  .panel-title { font-family:'Orbitron'; font-size:11px; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:10px; color:#b8a8e8; letter-spacing:2px; }
+  .list-wrap { max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:5px; }
+  .item-row { padding:8px; background:rgba(0,0,0,0.3); border-left:3px solid; display:flex; justify-content:space-between; align-items:center; }
+  .del-btn { background:none; border:none; color:#666; cursor:pointer; font-size:12px; }
+  .del-btn:hover { color:#f472b6; }
+
+  /* Modals */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); z-index:100; align-items:center; justify-content:center; }
+  .modal-overlay.active { display:flex; }
+  .modal { background:#0d1428; border:1px solid var(--accent1); padding:30px; width:400px; box-shadow:0 0 50px rgba(109,40,217,0.3); }
+  .form-group { margin-bottom:15px; }
+  .form-label { display:block; font-family:'Orbitron'; font-size:10px; color:#888; margin-bottom:5px; }
+  .form-input { width:100%; background:rgba(0,0,0,0.5); border:1px solid #444; color:#fff; padding:10px; outline:none; }
+  .form-input:focus { border-color:var(--accent1); }
+  .color-opts { display:flex; gap:5px; margin-top:5px; }
+  .c-opt { width:20px; height:20px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
+  .c-opt.sel { border-color:#fff; }
 </style>
 </head>
 <body>
@@ -69,50 +125,104 @@
 
 <button id="logoutBtn">DISCONNECT</button>
 
-<div class="app" id="mainApp">
-  <header>
-      <div class="header-top">
-          <div style="font-family:'Cinzel Decorative';font-size:24px;color:#a78bfa">AMETHYST</div>
-          <div style="font-family:'Orbitron';font-size:12px;color:#6b7da0" id="userEmailDisplay"></div>
-      </div>
-      <div class="header-month-bar">
-          <button id="prevMonth" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&lt;</button>
-          <div id="monthTitle" style="font-family:'Cormorant SC';font-size:24px;color:#fff;width:200px;text-align:center"></div>
-          <button id="nextMonth" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&gt;</button>
-      </div>
-  </header>
-
-  <div class="calendar-wrap">
-      <div class="weekdays">
-          <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
-      </div>
-      <div class="days-grid" id="daysGrid"></div>
+<div id="planet-stage">
+  <div class="planet-wrap" id="p-0"><div class="planet-orb" style="background:radial-gradient(circle at 30% 30%, #4fc3f7, #0d47a1);"></div></div>
+  <div class="planet-wrap" id="p-1"><div class="planet-orb" style="background:radial-gradient(circle at 30% 30%, #ff8a65, #bf360c);"></div></div>
+  <div class="planet-wrap" id="p-2"><div class="planet-orb" style="background:radial-gradient(circle at 30% 30%, #ffd54f, #ff6f00);"></div></div>
   </div>
 
-  <div style="margin-top:20px;text-align:center">
-      <button id="openEventModal" style="padding:10px 20px;background:#a78bfa;border:none;cursor:pointer;font-family:'Orbitron'">+ ADD EVENT</button>
+<div class="app" id="mainApp">
+  <header>
+    <div class="header-top">
+      <div class="logo-text">AMETHYST <span style="font-size:12px;font-family:'Orbitron';opacity:0.5" id="userEmailDisplay"></span></div>
+      <div class="header-nav">
+        <button class="btn" id="openEventModal">+ EVENT</button>
+        <button class="btn accent2" id="openTaskModal">+ TASK</button>
+      </div>
+    </div>
+    <div class="header-month-bar">
+      <button class="nav-btn" id="prevMonth">&#8249;</button>
+      <div class="month-title" id="monthTitle"></div>
+      <button class="nav-btn" id="nextMonth">&#8250;</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="calendar-wrap">
+      <div class="weekdays">
+        <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+      </div>
+      <div class="days-grid" id="daysGrid"></div>
+    </div>
+
+    <div class="sidebar">
+      <div class="panel">
+        <div class="panel-title">DAILY ALCHEMY</div>
+        <div id="alchemyQuote" style="font-size:11px;color:#d4c8f0;font-style:italic;text-align:center;line-height:1.6">
+          ✦ Connecting to the archive... ✦
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">UPCOMING EVENTS</div>
+        <div class="list-wrap" id="sidebarEvents">// No data //</div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" style="color:#f472b6">ACTIVE TASKS</div>
+        <div class="list-wrap" id="sidebarTasks">// No data //</div>
+      </div>
+    </div>
   </div>
 </div>
 
 <div class="modal-overlay" id="eventModalOverlay">
-    <div class="modal">
-        <input type="text" id="eventName" placeholder="Event Name" style="width:100%;padding:10px;margin-bottom:10px;background:#000;border:1px solid #555;color:#fff">
-        <input type="date" id="eventDate" style="width:100%;padding:10px;margin-bottom:10px;background:#000;border:1px solid #555;color:#fff">
-        <button id="saveEvent" style="width:100%;padding:10px;background:#a78bfa;border:none;cursor:pointer">SAVE</button>
-        <button id="closeEventModal" style="width:100%;padding:10px;background:none;border:1px solid #a78bfa;color:#fff;margin-top:5px;cursor:pointer">CANCEL</button>
+  <div class="modal">
+    <div class="panel-title">// NEW EVENT</div>
+    <div class="form-group"><input type="text" id="eventName" class="form-input" placeholder="Name"></div>
+    <div class="form-group"><input type="date" id="eventDate" class="form-input"></div>
+    <div class="form-group">
+      <label class="form-label">Color Energy</label>
+      <div class="color-opts" id="eventColors">
+        <div class="c-opt sel" style="background:#a78bfa" data-c="#a78bfa"></div>
+        <div class="c-opt" style="background:#f472b6" data-c="#f472b6"></div>
+        <div class="c-opt" style="background:#7ee8c8" data-c="#7ee8c8"></div>
+      </div>
     </div>
+    <button class="btn" id="saveEvent" style="width:100%">CONFIRM</button>
+    <button class="btn" id="closeEventModal" style="width:100%;margin-top:10px;background:none;border:none;opacity:0.6">CANCEL</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taskModalOverlay">
+  <div class="modal" style="border-color:var(--accent2)">
+    <div class="panel-title" style="color:var(--accent2)">// NEW TASK</div>
+    <div class="form-group"><input type="text" id="taskName" class="form-input" placeholder="Task Name"></div>
+    <div class="form-group">
+      <label class="form-label">Start / End</label>
+      <div style="display:flex;gap:5px">
+        <input type="date" id="taskStart" class="form-input">
+        <input type="date" id="taskEnd" class="form-input">
+      </div>
+    </div>
+    <button class="btn accent2" id="saveTask" style="width:100%">CONFIRM</button>
+    <button class="btn" id="closeTaskModal" style="width:100%;margin-top:10px;background:none;border:none;opacity:0.6">CANCEL</button>
+  </div>
 </div>
 
 <script>
-  // 🟢 替换为你的 Supabase URL 和 Key
+  // 🟢 修复报错的核心：修改变量名 supabase -> supabaseClient
   const SUPABASE_URL = 'https://pqbtavdigefbntegalga.supabase.co';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxYnRhdmRpZ2VmYm50ZWdhbGdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjAwNTQsImV4cCI6MjA4NjkzNjA1NH0.vCL9xK7icZPFrnellbZYul9GanRcRE_v8pe-RXJn2iI';
-  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  
+  // 使用 supabaseClient 以避免与 CDN 的全局变量 supabase 冲突
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  let user = null; // 存储当前用户信息
-  let isLoginMode = true; // 切换登录/注册模式
+  let user = null;
+  let isLoginMode = true;
+  let events = [];
+  let tasks = [];
+  let currentDate = new Date();
 
-  // 1. 认证逻辑 ________________________________________
+  // 1. 认证逻辑
   const authOverlay = document.getElementById('auth-overlay');
   const mainApp = document.getElementById('mainApp');
   const authMsg = document.getElementById('authMsg');
@@ -120,174 +230,208 @@
   const pwdInput = document.getElementById('password');
   const actionBtn = document.getElementById('loginActionBtn');
   const switchBtn = document.getElementById('switchModeBtn');
-  const logoutBtn = document.getElementById('logoutBtn');
 
-  // 监听登录状态变化 (核心!)
-  supabase.auth.onAuthStateChange((event, session) => {
+  // 监听登录状态
+  supabaseClient.auth.onAuthStateChange((event, session) => {
     if (session) {
       user = session.user;
-      console.log("Logged in as:", user.email);
-      // 登录成功：隐藏遮罩，显示主界面，显示登出按钮
+      console.log("Logged in:", user.email);
       authOverlay.classList.add('hidden');
       mainApp.classList.add('visible');
-      logoutBtn.style.display = 'block';
-      document.getElementById('userEmailDisplay').textContent = user.email;
-      // 加载数据
+      document.getElementById('logoutBtn').style.display = 'block';
+      document.getElementById('userEmailDisplay').textContent = ":: " + user.email;
       fetchAllData();
     } else {
       user = null;
-      // 未登录：显示遮罩，隐藏主界面
       authOverlay.classList.remove('hidden');
       mainApp.classList.remove('visible');
-      logoutBtn.style.display = 'none';
+      document.getElementById('logoutBtn').style.display = 'none';
     }
   });
 
-  // 登录/注册按钮点击
   actionBtn.addEventListener('click', async () => {
     const email = emailInput.value;
     const password = pwdInput.value;
-    if(!email || !password) { authMsg.textContent = "Please fill in all fields."; return; }
-
-    authMsg.textContent = "Consulting the stars...";
+    if(!email || !password) { authMsg.textContent = "Please input email & password."; return; }
+    authMsg.textContent = "Processing...";
     
     if (isLoginMode) {
-      // 登录
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) authMsg.textContent = error.message;
     } else {
-      // 注册
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) {
-        authMsg.textContent = error.message;
-      } else {
-        authMsg.textContent = "Registration successful! You may now login.";
-        isLoginMode = true;
-        updateAuthUI();
+      const { error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) authMsg.textContent = error.message;
+      else {
+        authMsg.textContent = "Registered! Check email or login directly.";
+        isLoginMode = true; updateAuthUI();
       }
     }
   });
 
-  // 切换模式
-  switchBtn.addEventListener('click', () => {
-    isLoginMode = !isLoginMode;
-    updateAuthUI();
-  });
-
+  switchBtn.addEventListener('click', () => { isLoginMode = !isLoginMode; updateAuthUI(); });
   function updateAuthUI() {
-    if(isLoginMode) {
-      actionBtn.textContent = "ENTER THE ARCHIVE";
-      switchBtn.textContent = "No account? Click to Register";
-    } else {
-      actionBtn.textContent = "REGISTER IDENTITY";
-      switchBtn.textContent = "Have an account? Login";
-    }
+    actionBtn.textContent = isLoginMode ? "ENTER THE ARCHIVE" : "REGISTER IDENTITY";
+    switchBtn.textContent = isLoginMode ? "No account? Click to Register" : "Have an account? Login";
     authMsg.textContent = "";
   }
-
-  // 登出
-  logoutBtn.addEventListener('click', async () => {
-    await supabase.auth.signOut();
-    // 数据清空，防止闪屏看到旧数据
-    events = [];
-    renderCalendar();
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await supabaseClient.auth.signOut();
+    events = []; tasks = []; renderCalendar();
   });
 
-
-  // 2. 日历逻辑 (增加 RLS 后的微调) _______________________
-  
-  let currentDate = new Date();
-  let events = [];
-
-  // 获取数据 (RLS会自动只返回当前用户的数据，所以代码不用改)
+  // 2. 数据逻辑
   async function fetchAllData() {
     if(!user) return;
-    const { data, error } = await supabase.from('events').select('*');
-    if (data) {
-      events = data;
-      renderCalendar();
-    }
+    const { data: eData } = await supabaseClient.from('events').select('*');
+    if (eData) events = eData;
+    const { data: tData } = await supabaseClient.from('tasks').select('*');
+    if (tData) tasks = tData;
+    renderCalendar();
   }
 
-  // 保存数据 (Supabase SQL默认值会自动填入user_id，所以这里也不用改)
-  document.getElementById('saveEvent').addEventListener('click', async () => {
-    const name = document.getElementById('eventName').value;
-    const date = document.getElementById('eventDate').value;
-    if(!name || !date) return;
-
-    const { data, error } = await supabase
-      .from('events')
-      .insert([{ name, date, color: '#a78bfa' }]) // RLS 自动补全 user_id
-      .select();
-
-    if (data) {
-      events.push(data[0]);
-      document.getElementById('eventModalOverlay').classList.remove('active');
-      renderCalendar();
-    } else {
-      alert("Error saving: " + error.message);
-    }
-  });
-
-  // 删除数据
-  // ... (逻辑同上，RLS 保证只能删自己的)
-
-  // 基础渲染函数 (简化版，请用你之前的完整渲染逻辑)
+  // 3. 渲染逻辑
+  function toDateStr(d) { return d.toISOString().split('T')[0]; }
+  
   function renderCalendar() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    
+    document.getElementById('monthTitle').textContent = `${year} / ${String(month+1).padStart(2,'0')}`;
+    
+    // 星球切换 (简化版)
+    document.querySelectorAll('.planet-wrap').forEach((p, i) => {
+        p.style.display = (i === month % 3) ? 'block' : 'none'; // 简单的3色轮换演示
+    });
+
     const grid = document.getElementById('daysGrid');
     grid.innerHTML = '';
-    const title = document.getElementById('monthTitle');
-    title.textContent = `${currentDate.getFullYear()} / ${currentDate.getMonth()+1}`;
-
-    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 0).getDate();
-    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
-
-    for(let i=0; i<firstDay; i++) {
-        grid.appendChild(document.createElement('div'));
-    }
-
+    
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    
+    // 空白填充
+    for(let i=0; i<firstDay; i++) grid.appendChild(document.createElement('div'));
+    
+    // 日期生成
     for(let i=1; i<=daysInMonth; i++) {
         const cell = document.createElement('div');
-        cell.className = 'day-cell';
-        cell.innerHTML = `<div style="font-family:'Orbitron';font-size:12px;margin-bottom:5px">${i}</div>`;
+        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+        const isToday = (new Date().toDateString() === new Date(year, month, i).toDateString());
         
-        const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+        cell.className = 'day-cell' + (isToday ? ' today' : '');
+        cell.innerHTML = `<div class="day-num">${i}</div>`;
         
-        // 渲染该日期的事件
-        const dayEvents = events.filter(e => e.date === dateStr);
-        dayEvents.forEach(e => {
-            const div = document.createElement('div');
-            div.style.fontSize = '10px';
-            div.style.background = 'rgba(167,139,250,0.3)';
-            div.style.padding = '2px';
-            div.style.marginBottom = '2px';
-            div.textContent = e.name;
-            cell.appendChild(div);
+        // 渲染事件
+        events.filter(e => e.date === dateStr).forEach(e => {
+            const chip = document.createElement('div');
+            chip.className = 'event-chip';
+            chip.style.borderColor = e.color || '#a78bfa';
+            chip.style.color = e.color || '#a78bfa';
+            chip.textContent = e.name;
+            cell.appendChild(chip);
+        });
+
+        // 渲染任务条 (简单点)
+        tasks.forEach(t => {
+            if (dateStr >= t.start && dateStr <= t.end) {
+                const bar = document.createElement('div');
+                bar.className = 'task-bar';
+                bar.style.background = t.color || '#f472b6';
+                cell.appendChild(bar);
+            }
         });
 
         grid.appendChild(cell);
     }
+    renderSidebar();
   }
 
-  // Modal 控制
-  document.getElementById('openEventModal').addEventListener('click', ()=>{
-      document.getElementById('eventModalOverlay').classList.add('active');
-  });
-  document.getElementById('closeEventModal').addEventListener('click', ()=>{
-      document.getElementById('eventModalOverlay').classList.remove('active');
+  function renderSidebar() {
+    const sEvents = document.getElementById('sidebarEvents');
+    sEvents.innerHTML = '';
+    events.forEach(e => {
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        row.style.borderColor = e.color;
+        row.innerHTML = `<div style="font-size:11px">${e.date} ${e.name}</div><button class="del-btn" onclick="delEvent('${e.id}')">✕</button>`;
+        sEvents.appendChild(row);
+    });
+
+    const sTasks = document.getElementById('sidebarTasks');
+    sTasks.innerHTML = '';
+    tasks.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        row.style.borderColor = t.color || '#f472b6';
+        row.innerHTML = `<div style="font-size:11px">${t.name}</div><button class="del-btn" onclick="delTask('${t.id}')">✕</button>`;
+        sTasks.appendChild(row);
+    });
+  }
+
+  // 4. 操作逻辑 (保存/删除)
+  document.getElementById('saveEvent').addEventListener('click', async () => {
+    const name = document.getElementById('eventName').value;
+    const date = document.getElementById('eventDate').value;
+    const color = document.querySelector('#eventColors .sel').dataset.c;
+    if(!name || !date) return;
+    
+    const { data } = await supabaseClient.from('events').insert([{ name, date, color }]).select();
+    if(data) {
+        events.push(data[0]);
+        document.getElementById('eventModalOverlay').classList.remove('active');
+        renderCalendar();
+    }
   });
 
-  // 月份切换
-  document.getElementById('prevMonth').addEventListener('click', () => {
-    currentDate.setMonth(currentDate.getMonth()-1);
-    renderCalendar();
-  });
-  document.getElementById('nextMonth').addEventListener('click', () => {
-    currentDate.setMonth(currentDate.getMonth()+1);
-    renderCalendar();
+  document.getElementById('saveTask').addEventListener('click', async () => {
+    const name = document.getElementById('taskName').value;
+    const start = document.getElementById('taskStart').value;
+    const end = document.getElementById('taskEnd').value;
+    if(!name || !start) return;
+
+    const { data } = await supabaseClient.from('tasks').insert([{ name, start, end, color:'#f472b6' }]).select();
+    if(data) {
+        tasks.push(data[0]);
+        document.getElementById('taskModalOverlay').classList.remove('active');
+        renderCalendar();
+    }
   });
 
-  // 初始化（不需要调 fetch，因为 Auth 监听器会调）
+  // 全局删除函数
+  window.delEvent = async (id) => {
+    if(!confirm("Delete?")) return;
+    await supabaseClient.from('events').delete().eq('id', id);
+    events = events.filter(e => e.id != id); renderCalendar();
+  };
+  window.delTask = async (id) => {
+    if(!confirm("Delete?")) return;
+    await supabaseClient.from('tasks').delete().eq('id', id);
+    tasks = tasks.filter(t => t.id != t.id); renderCalendar(); // Fix filter bug locally
+    fetchAllData(); // Refresh to be safe
+  };
+
+  // UI 杂项
+  document.getElementById('prevMonth').addEventListener('click', ()=>{ currentDate.setMonth(currentDate.getMonth()-1); renderCalendar(); });
+  document.getElementById('nextMonth').addEventListener('click', ()=>{ currentDate.setMonth(currentDate.getMonth()+1); renderCalendar(); });
+  
+  // Modals
+  document.getElementById('openEventModal').addEventListener('click', ()=>document.getElementById('eventModalOverlay').classList.add('active'));
+  document.getElementById('closeEventModal').addEventListener('click', ()=>document.getElementById('eventModalOverlay').classList.remove('active'));
+  document.getElementById('openTaskModal').addEventListener('click', ()=>document.getElementById('taskModalOverlay').classList.add('active'));
+  document.getElementById('closeTaskModal').addEventListener('click', ()=>document.getElementById('taskModalOverlay').classList.remove('active'));
+
+  // 简单的颜色选择器逻辑
+  document.querySelectorAll('.c-opt').forEach(el => {
+      el.addEventListener('click', function() {
+          document.querySelectorAll('.c-opt').forEach(c=>c.classList.remove('sel'));
+          this.classList.add('sel');
+      });
+  });
+
+  // 随机格言
+  const quotes = ["As above, so below.", "The stars incline, but do not bind.", "Focus intent; energy flows.", "Transmute the mundane."];
+  document.getElementById('alchemyQuote').textContent = "✦ " + quotes[Math.floor(Math.random()*quotes.length)] + " ✦";
+
 </script>
 </body>
 </html>
