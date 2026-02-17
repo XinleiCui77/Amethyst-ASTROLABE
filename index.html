@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMETHYST — Private Archive</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700;900&family=Cormorant+SC:wght@600;700&family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #04060f; --bg2: #080c1c; --bg3: #0c1224; --accent1: #a78bfa; --accent2: #f472b6; --accent3: #818cf8; --text: #e8eaf6; --text-dim: #6b7da0; --border: rgba(167,139,250,0.18); --glow1: 0 0 24px rgba(167,139,250,0.5); }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans SC', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  
+  /* 背景星云特效 (复用之前的) */
+  body::after { content:''; position:fixed; inset:0; background: radial-gradient(ellipse 70% 50% at 15% 20%, rgba(109,40,217,0.18) 0%, transparent 65%), radial-gradient(ellipse 55% 45% at 85% 75%, rgba(79,70,229,0.16) 0%, transparent 65%); pointer-events:none; z-index:0; animation: nebulaPulse 12s ease-in-out infinite alternate; }
+  @keyframes nebulaPulse { 0% { opacity:0.7; transform:scale(1); } 50% { opacity:1; transform:scale(1.03); } 100% { opacity:0.8; transform:scale(0.98); } }
+  
+  /* 登录遮罩层 */
+  #auth-overlay { position:fixed; inset:0; z-index:9999; background:#04060f; display:flex; align-items:center; justify-content:center; flex-direction:column; transition:opacity 0.8s ease; }
+  #auth-overlay.hidden { opacity:0; pointer-events:none; }
+  
+  .auth-box { width:360px; padding:40px; background:linear-gradient(135deg, rgba(13,20,40,0.9), rgba(19,30,53,0.95)); border:1px solid var(--accent1); box-shadow:0 0 50px rgba(167,139,250,0.2); text-align:center; position:relative; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%); }
+  .auth-title { font-family:'Cinzel Decorative'; font-size:28px; color:var(--accent1); margin-bottom:10px; text-shadow:0 0 10px rgba(167,139,250,0.5); }
+  .auth-sub { font-family:'Orbitron'; font-size:10px; color:var(--text-dim); letter-spacing:2px; margin-bottom:30px; }
+  .auth-input { width:100%; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:white; padding:12px; margin-bottom:15px; outline:none; font-family:'Orbitron'; font-size:12px; transition:all 0.3s; }
+  .auth-input:focus { border-color:var(--accent1); box-shadow:0 0 15px rgba(167,139,250,0.3); }
+  .auth-btn { width:100%; padding:12px; background:linear-gradient(90deg, #6366f1, #a78bfa); border:none; color:white; font-family:'Orbitron'; font-weight:bold; letter-spacing:1px; cursor:pointer; margin-top:10px; transition:all 0.3s; }
+  .auth-btn:hover { box-shadow:0 0 20px rgba(167,139,250,0.6); letter-spacing:2px; }
+  .auth-msg { font-size:11px; color:var(--accent2); margin-top:15px; min-height:16px; }
+  .switch-mode { font-size:11px; color:var(--text-dim); margin-top:20px; cursor:pointer; text-decoration:underline; }
+
+  /* 登出按钮 */
+  #logoutBtn { position:absolute; top:20px; right:20px; z-index:100; font-family:'Orbitron'; font-size:10px; background:rgba(255,0,0,0.1); border:1px solid rgba(255,0,0,0.3); color:#ff9999; padding:6px 12px; cursor:pointer; display:none; }
+  #logoutBtn:hover { background:rgba(255,0,0,0.2); box-shadow:0 0 10px rgba(255,0,0,0.3); }
+
+  /* 隐藏主界面，直到登录 */
+  .app { opacity:0; transition:opacity 1s ease; pointer-events:none; }
+  .app.visible { opacity:1; pointer-events:auto; }
+
+  /* 复用原本的 CSS ... (为了代码简洁，这里省略部分重复的日历样式，它们跟之前一样) */
+  /* 请确保保留之前的 .calendar-wrap, .day-cell, .event-item 等所有样式 */
+  /* ↓↓↓ 这是一个简化的占位，实际使用时请把上一版的 style 内容全部贴在这里 ↓↓↓ */
+  .header-top { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(167,139,250,0.2); padding-bottom:20px; margin-bottom:20px; }
+  .calendar-wrap { background:rgba(8,12,28,0.8); border:1px solid rgba(167,139,250,0.2); }
+  .days-grid { display:grid; grid-template-columns:repeat(7,1fr); }
+  .day-cell { min-height:100px; border:1px solid rgba(167,139,250,0.1); padding:5px; color:#fff; cursor:pointer;}
+  .day-cell:hover { background:rgba(167,139,250,0.1); }
+  .weekdays { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; color:#a78bfa; font-family:'Orbitron'; padding:10px 0;}
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
+  .modal-overlay.active { display:flex; }
+  .modal { background:#0d1428; border:1px solid #a78bfa; padding:30px; width:400px; }
+  /* ... 其他样式请从上一版复制过来 ... */
+  
+</style>
+</head>
+<body>
+
+<div id="auth-overlay">
+  <div class="auth-box">
+    <div class="auth-title">AMETHYST</div>
+    <div class="auth-sub">IDENTITY VERIFICATION</div>
+    <input type="email" id="email" class="auth-input" placeholder="EMAIL ADDRESS">
+    <input type="password" id="password" class="auth-input" placeholder="PASSWORD">
+    <button class="auth-btn" id="loginActionBtn">ENTER THE ARCHIVE</button>
+    <div class="auth-msg" id="authMsg"></div>
+    <div class="switch-mode" id="switchModeBtn">No account? Click to Register</div>
+  </div>
+</div>
+
+<button id="logoutBtn">DISCONNECT</button>
+
+<div class="app" id="mainApp">
+  <header>
+      <div class="header-top">
+          <div style="font-family:'Cinzel Decorative';font-size:24px;color:#a78bfa">AMETHYST</div>
+          <div style="font-family:'Orbitron';font-size:12px;color:#6b7da0" id="userEmailDisplay"></div>
+      </div>
+      <div class="header-month-bar">
+          <button id="prevMonth" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&lt;</button>
+          <div id="monthTitle" style="font-family:'Cormorant SC';font-size:24px;color:#fff;width:200px;text-align:center"></div>
+          <button id="nextMonth" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&gt;</button>
+      </div>
+  </header>
+
+  <div class="calendar-wrap">
+      <div class="weekdays">
+          <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+      </div>
+      <div class="days-grid" id="daysGrid"></div>
+  </div>
+
+  <div style="margin-top:20px;text-align:center">
+      <button id="openEventModal" style="padding:10px 20px;background:#a78bfa;border:none;cursor:pointer;font-family:'Orbitron'">+ ADD EVENT</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="eventModalOverlay">
+    <div class="modal">
+        <input type="text" id="eventName" placeholder="Event Name" style="width:100%;padding:10px;margin-bottom:10px;background:#000;border:1px solid #555;color:#fff">
+        <input type="date" id="eventDate" style="width:100%;padding:10px;margin-bottom:10px;background:#000;border:1px solid #555;color:#fff">
+        <button id="saveEvent" style="width:100%;padding:10px;background:#a78bfa;border:none;cursor:pointer">SAVE</button>
+        <button id="closeEventModal" style="width:100%;padding:10px;background:none;border:1px solid #a78bfa;color:#fff;margin-top:5px;cursor:pointer">CANCEL</button>
+    </div>
+</div>
+
+<script>
+  // 🟢 替换为你的 Supabase URL 和 Key
+  const SUPABASE_URL = 'https://你的项目ID.supabase.co';
+  const SUPABASE_KEY = '你的AnonKey';
+  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let user = null; // 存储当前用户信息
+  let isLoginMode = true; // 切换登录/注册模式
+
+  // 1. 认证逻辑 ________________________________________
+  const authOverlay = document.getElementById('auth-overlay');
+  const mainApp = document.getElementById('mainApp');
+  const authMsg = document.getElementById('authMsg');
+  const emailInput = document.getElementById('email');
+  const pwdInput = document.getElementById('password');
+  const actionBtn = document.getElementById('loginActionBtn');
+  const switchBtn = document.getElementById('switchModeBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  // 监听登录状态变化 (核心!)
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session) {
+      user = session.user;
+      console.log("Logged in as:", user.email);
+      // 登录成功：隐藏遮罩，显示主界面，显示登出按钮
+      authOverlay.classList.add('hidden');
+      mainApp.classList.add('visible');
+      logoutBtn.style.display = 'block';
+      document.getElementById('userEmailDisplay').textContent = user.email;
+      // 加载数据
+      fetchAllData();
+    } else {
+      user = null;
+      // 未登录：显示遮罩，隐藏主界面
+      authOverlay.classList.remove('hidden');
+      mainApp.classList.remove('visible');
+      logoutBtn.style.display = 'none';
+    }
+  });
+
+  // 登录/注册按钮点击
+  actionBtn.addEventListener('click', async () => {
+    const email = emailInput.value;
+    const password = pwdInput.value;
+    if(!email || !password) { authMsg.textContent = "Please fill in all fields."; return; }
+
+    authMsg.textContent = "Consulting the stars...";
+    
+    if (isLoginMode) {
+      // 登录
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) authMsg.textContent = error.message;
+    } else {
+      // 注册
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        authMsg.textContent = error.message;
+      } else {
+        authMsg.textContent = "Registration successful! You may now login.";
+        isLoginMode = true;
+        updateAuthUI();
+      }
+    }
+  });
+
+  // 切换模式
+  switchBtn.addEventListener('click', () => {
+    isLoginMode = !isLoginMode;
+    updateAuthUI();
+  });
+
+  function updateAuthUI() {
+    if(isLoginMode) {
+      actionBtn.textContent = "ENTER THE ARCHIVE";
+      switchBtn.textContent = "No account? Click to Register";
+    } else {
+      actionBtn.textContent = "REGISTER IDENTITY";
+      switchBtn.textContent = "Have an account? Login";
+    }
+    authMsg.textContent = "";
+  }
+
+  // 登出
+  logoutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    // 数据清空，防止闪屏看到旧数据
+    events = [];
+    renderCalendar();
+  });
+
+
+  // 2. 日历逻辑 (增加 RLS 后的微调) _______________________
+  
+  let currentDate = new Date();
+  let events = [];
+
+  // 获取数据 (RLS会自动只返回当前用户的数据，所以代码不用改)
+  async function fetchAllData() {
+    if(!user) return;
+    const { data, error } = await supabase.from('events').select('*');
+    if (data) {
+      events = data;
+      renderCalendar();
+    }
+  }
+
+  // 保存数据 (Supabase SQL默认值会自动填入user_id，所以这里也不用改)
+  document.getElementById('saveEvent').addEventListener('click', async () => {
+    const name = document.getElementById('eventName').value;
+    const date = document.getElementById('eventDate').value;
+    if(!name || !date) return;
+
+    const { data, error } = await supabase
+      .from('events')
+      .insert([{ name, date, color: '#a78bfa' }]) // RLS 自动补全 user_id
+      .select();
+
+    if (data) {
+      events.push(data[0]);
+      document.getElementById('eventModalOverlay').classList.remove('active');
+      renderCalendar();
+    } else {
+      alert("Error saving: " + error.message);
+    }
+  });
+
+  // 删除数据
+  // ... (逻辑同上，RLS 保证只能删自己的)
+
+  // 基础渲染函数 (简化版，请用你之前的完整渲染逻辑)
+  function renderCalendar() {
+    const grid = document.getElementById('daysGrid');
+    grid.innerHTML = '';
+    const title = document.getElementById('monthTitle');
+    title.textContent = `${currentDate.getFullYear()} / ${currentDate.getMonth()+1}`;
+
+    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 0).getDate();
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+
+    for(let i=0; i<firstDay; i++) {
+        grid.appendChild(document.createElement('div'));
+    }
+
+    for(let i=1; i<=daysInMonth; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'day-cell';
+        cell.innerHTML = `<div style="font-family:'Orbitron';font-size:12px;margin-bottom:5px">${i}</div>`;
+        
+        const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+        
+        // 渲染该日期的事件
+        const dayEvents = events.filter(e => e.date === dateStr);
+        dayEvents.forEach(e => {
+            const div = document.createElement('div');
+            div.style.fontSize = '10px';
+            div.style.background = 'rgba(167,139,250,0.3)';
+            div.style.padding = '2px';
+            div.style.marginBottom = '2px';
+            div.textContent = e.name;
+            cell.appendChild(div);
+        });
+
+        grid.appendChild(cell);
+    }
+  }
+
+  // Modal 控制
+  document.getElementById('openEventModal').addEventListener('click', ()=>{
+      document.getElementById('eventModalOverlay').classList.add('active');
+  });
+  document.getElementById('closeEventModal').addEventListener('click', ()=>{
+      document.getElementById('eventModalOverlay').classList.remove('active');
+  });
+
+  // 月份切换
+  document.getElementById('prevMonth').addEventListener('click', () => {
+    currentDate.setMonth(currentDate.getMonth()-1);
+    renderCalendar();
+  });
+  document.getElementById('nextMonth').addEventListener('click', () => {
+    currentDate.setMonth(currentDate.getMonth()+1);
+    renderCalendar();
+  });
+
+  // 初始化（不需要调 fetch，因为 Auth 监听器会调）
+</script>
+</body>
+</html>
