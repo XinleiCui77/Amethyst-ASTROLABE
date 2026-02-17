@@ -745,6 +745,40 @@
   /* User email tag */
   .user-tag { font-family:'Orbitron'; font-size:9px; color:var(--text-dim); letter-spacing:1px; opacity:0.6; margin-left:8px; }
 
+
+  /* ── SCROLL PICKER ── */
+  .scroll-picker-row {
+    display:flex; align-items:center; gap:6px;
+    background:rgba(0,0,0,0.35); border:1px solid var(--border);
+    padding:4px 10px; border-radius:2px;
+  }
+  .scroll-col-sep { color:var(--text-dim); font-family:'Orbitron'; font-size:14px; user-select:none; }
+  .scroll-col {
+    height:110px; overflow-y:scroll; flex:1;
+    scrollbar-width:none;
+    scroll-snap-type:y mandatory;
+    position:relative;
+  }
+  .scroll-col::-webkit-scrollbar { display:none; }
+  .scroll-col::before, .scroll-col::after {
+    content:''; position:sticky; left:0; right:0; height:36px;
+    display:block; pointer-events:none; z-index:2;
+  }
+  .scroll-col::before { top:0; background:linear-gradient(to bottom, rgba(8,12,28,0.95), transparent); }
+  .scroll-col::after  { bottom:0; background:linear-gradient(to top, rgba(8,12,28,0.95), transparent); }
+  .scroll-item {
+    height:36px; display:flex; align-items:center; justify-content:center;
+    font-family:'Orbitron'; font-size:12px; letter-spacing:1px; color:var(--text-dim);
+    scroll-snap-align:center; cursor:pointer; transition:color 0.2s;
+    user-select:none;
+  }
+  .scroll-item.active {
+    color:#fff; font-size:14px;
+    text-shadow: 0 0 10px rgba(167,139,250,0.8);
+  }
+  /* highlight bar in middle */
+  .scroll-picker-row { position:relative; }
+
 </style>
 </head>
 <body>
@@ -940,12 +974,39 @@
 <div class="modal-overlay" id="eventModalOverlay">
   <div class="modal">
     <button class="modal-close" id="closeEventModal">✕</button>
-    <div class="modal-title">// ADD EVENT //</div>
-    <div class="form-group"><label class="form-label">日程名称</label><input type="text" class="form-input" id="eventName" placeholder="输入日程名称..."></div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">日期</label><input type="date" class="form-input" id="eventDate"></div>
-      <div class="form-group"><label class="form-label">时间</label><input type="time" class="form-input" id="eventTime"></div>
+    <div class="modal-title" id="eventModalTitle">// ADD EVENT //</div>
+    <input type="hidden" id="editingEventId">
+
+    <div class="form-group">
+      <label class="form-label">日程名称</label>
+      <input type="text" class="form-input" id="eventName" placeholder="输入日程名称...">
     </div>
+
+    <div class="form-group">
+      <label class="form-label">地点（可选）</label>
+      <input type="text" class="form-input" id="eventLocation" placeholder="输入地点...">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">日期</label>
+      <div class="scroll-picker-row" id="datePicker">
+        <div class="scroll-col" id="yearCol"></div>
+        <div class="scroll-col-sep">—</div>
+        <div class="scroll-col" id="monthCol"></div>
+        <div class="scroll-col-sep">—</div>
+        <div class="scroll-col" id="dayCol"></div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">时间（可选）</label>
+      <div class="scroll-picker-row" id="timePicker">
+        <div class="scroll-col" id="hourCol"></div>
+        <div class="scroll-col-sep">:</div>
+        <div class="scroll-col" id="minuteCol"></div>
+      </div>
+    </div>
+
     <div class="form-group">
       <label class="form-label">颜色标签</label>
       <div class="color-picker" id="eventColorPicker">
@@ -957,7 +1018,11 @@
         <div class="color-opt" style="background:#ff7b00" data-color="#ff7b00"></div>
       </div>
     </div>
-    <div class="modal-actions"><button class="btn" id="saveEvent">CONFIRM</button></div>
+
+    <div class="modal-actions">
+      <button class="btn" id="saveEvent">CONFIRM</button>
+      <button class="btn" id="deleteEditingEvent" style="display:none;background:rgba(255,0,110,0.1);border-color:rgba(255,0,110,0.4);color:#f9a8d4;margin-left:8px">DELETE</button>
+    </div>
   </div>
 </div>
 
@@ -1146,8 +1211,10 @@
   function createEventItem(ev) {
     const el = document.createElement('div');
     el.className='event-item'; el.style.borderColor=ev.color;
-    el.innerHTML=`<div class="event-item-info"><div class="event-item-name" style="color:${ev.color}">${ev.name}</div><div class="event-item-meta">${ev.date}${ev.time?' · '+ev.time:''}</div></div><button class="event-item-del" data-id="${ev.id}">✕</button>`;
-    el.querySelector('.event-item-del').addEventListener('click', e => { e.stopPropagation(); events=events.filter(x=>x.id!==ev.id); save(); renderCalendar(); });
+    const loc = ev.location ? `<span style="font-size:9px;opacity:0.6"> · 📍${ev.location}</span>` : '';
+    el.innerHTML=`<div class="event-item-info" style="cursor:pointer"><div class="event-item-name" style="color:${ev.color}">${ev.name}${loc}</div><div class="event-item-meta">${ev.date}${ev.time?' · '+ev.time:''}</div></div><button class="event-item-del" data-id="${ev.id}" title="Delete">✕</button>`;
+    el.querySelector('.event-item-info').addEventListener('click', () => openEventModal(ev));
+    el.querySelector('.event-item-del').addEventListener('click', e => { e.stopPropagation(); delEvent(ev.id); });
     return el;
   }
 
@@ -1180,6 +1247,9 @@
     else dayEvents.forEach(ev=>todayEl.appendChild(createEventItem(ev)));
   }
 
+  // ════════════════════════════════════
+  // COLOR PICKERS
+  // ════════════════════════════════════
   function setupColorPicker(id) {
     document.getElementById(id).querySelectorAll('.color-opt').forEach(opt => {
       opt.addEventListener('click', () => {
@@ -1191,52 +1261,206 @@
   setupColorPicker('eventColorPicker');
   setupColorPicker('taskColorPicker');
 
-  // ── MODAL OPEN/CLOSE ──
-  document.getElementById('openEventModal').addEventListener('click', () => document.getElementById('eventModalOverlay').classList.add('active'));
+  // ════════════════════════════════════
+  // SCROLL PICKER
+  // ════════════════════════════════════
+  function buildScrollCol(el, items, selectedVal) {
+    el.innerHTML = '';
+    // padding top/bottom so first/last can center
+    el.appendChild(Object.assign(document.createElement('div'), {className:'scroll-item', style:'visibility:hidden'}));
+    el.appendChild(Object.assign(document.createElement('div'), {className:'scroll-item', style:'visibility:hidden'}));
+    items.forEach(item => {
+      const d = document.createElement('div');
+      d.className = 'scroll-item' + (String(item.val) === String(selectedVal) ? ' active' : '');
+      d.textContent = item.label;
+      d.dataset.val = item.val;
+      el.appendChild(d);
+    });
+    el.appendChild(Object.assign(document.createElement('div'), {className:'scroll-item', style:'visibility:hidden'}));
+    el.appendChild(Object.assign(document.createElement('div'), {className:'scroll-item', style:'visibility:hidden'}));
+
+    // scroll to selected
+    const activeEl = el.querySelector('.scroll-item.active');
+    if (activeEl) {
+      setTimeout(() => { el.scrollTop = activeEl.offsetTop - el.offsetHeight/2 + activeEl.offsetHeight/2; }, 30);
+    }
+
+    // on scroll, update active
+    el.addEventListener('scroll', () => {
+      const center = el.scrollTop + el.offsetHeight / 2;
+      let closest = null, minDist = Infinity;
+      el.querySelectorAll('.scroll-item[data-val]').forEach(item => {
+        const dist = Math.abs(item.offsetTop + item.offsetHeight/2 - center);
+        if (dist < minDist) { minDist = dist; closest = item; }
+      });
+      if (closest) {
+        el.querySelectorAll('.scroll-item').forEach(i => i.classList.remove('active'));
+        closest.classList.add('active');
+        if (el.id === 'monthCol' || el.id === 'dayCol') updateDayCol();
+      }
+    });
+
+    // click to select
+    el.querySelectorAll('.scroll-item[data-val]').forEach(item => {
+      item.addEventListener('click', () => {
+        el.scrollTo({ top: item.offsetTop - el.offsetHeight/2 + item.offsetHeight/2, behavior:'smooth' });
+      });
+    });
+  }
+
+  function getScrollVal(colId) {
+    const el = document.getElementById(colId);
+    const active = el.querySelector('.scroll-item.active');
+    return active ? active.dataset.val : null;
+  }
+
+  function initDatePicker(dateStr) {
+    const now = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+    const selYear = now.getFullYear(), selMonth = now.getMonth()+1, selDay = now.getDate();
+
+    const years = [];
+    for (let y = 2020; y <= 2035; y++) years.push({val:y, label:String(y)});
+    const months = Array.from({length:12}, (_,i) => ({val:i+1, label:String(i+1).padStart(2,'0')}));
+    const daysInMonth = new Date(selYear, selMonth, 0).getDate();
+    const days = Array.from({length:daysInMonth}, (_,i) => ({val:i+1, label:String(i+1).padStart(2,'0')}));
+
+    buildScrollCol(document.getElementById('yearCol'),  years,  selYear);
+    buildScrollCol(document.getElementById('monthCol'), months, selMonth);
+    buildScrollCol(document.getElementById('dayCol'),   days,   selDay);
+  }
+
+  function updateDayCol() {
+    const y = parseInt(getScrollVal('yearCol')) || new Date().getFullYear();
+    const m = parseInt(getScrollVal('monthCol')) || new Date().getMonth()+1;
+    const prevDay = parseInt(getScrollVal('dayCol')) || 1;
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const days = Array.from({length:daysInMonth}, (_,i) => ({val:i+1, label:String(i+1).padStart(2,'0')}));
+    buildScrollCol(document.getElementById('dayCol'), days, Math.min(prevDay, daysInMonth));
+  }
+
+  function initTimePicker(timeStr) {
+    const parts = (timeStr || '').split(':');
+    const selH = parts[0] ? parseInt(parts[0]) : null;
+    const selM = parts[1] ? Math.round(parseInt(parts[1])/5)*5 : null;
+    const hours   = Array.from({length:24}, (_,i) => ({val:i, label:String(i).padStart(2,'0')}));
+    const minutes = Array.from({length:12}, (_,i) => ({val:i*5, label:String(i*5).padStart(2,'0')}));
+    buildScrollCol(document.getElementById('hourCol'),   hours,   selH ?? 9);
+    buildScrollCol(document.getElementById('minuteCol'), minutes, selM ?? 0);
+  }
+
+  function getPickedDate() {
+    const y = getScrollVal('yearCol'), m = getScrollVal('monthCol'), d = getScrollVal('dayCol');
+    if (!y || !m || !d) return '';
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+
+  function getPickedTime() {
+    const h = getScrollVal('hourCol'), m = getScrollVal('minuteCol');
+    if (h === null) return '';
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  }
+
+  // ════════════════════════════════════
+  // MODAL OPEN / RESET / EDIT
+  // ════════════════════════════════════
+  function openEventModal(ev) {
+    const isEdit = !!ev;
+    document.getElementById('eventModalTitle').textContent = isEdit ? '// EDIT EVENT //' : '// ADD EVENT //';
+    document.getElementById('editingEventId').value = isEdit ? ev.id : '';
+    document.getElementById('eventName').value = isEdit ? ev.name : '';
+    document.getElementById('eventLocation').value = isEdit ? (ev.location || '') : '';
+    document.getElementById('deleteEditingEvent').style.display = isEdit ? 'inline-block' : 'none';
+
+    // reset color picker
+    document.getElementById('eventColorPicker').querySelectorAll('.color-opt').forEach((o,i) => {
+      o.classList.toggle('selected', isEdit ? o.dataset.color === ev.color : i === 0);
+    });
+
+    initDatePicker(isEdit ? ev.date : getPickedDate() || toDateStr(currentYear, currentMonth, new Date().getDate()));
+    initTimePicker(isEdit ? ev.time : '');
+
+    document.getElementById('eventModalOverlay').classList.add('active');
+  }
+
+  document.getElementById('openEventModal').addEventListener('click', () => openEventModal(null));
   document.getElementById('closeEventModal').addEventListener('click', () => document.getElementById('eventModalOverlay').classList.remove('active'));
-  document.getElementById('openTaskModal').addEventListener('click', () => document.getElementById('taskModalOverlay').classList.add('active'));
+  document.getElementById('openTaskModal').addEventListener('click', () => {
+    document.getElementById('taskName').value = '';
+    document.getElementById('taskModalOverlay').classList.add('active');
+  });
   document.getElementById('closeTaskModal').addEventListener('click', () => document.getElementById('taskModalOverlay').classList.remove('active'));
 
   document.getElementById('prevMonth').addEventListener('click', () => { currentMonth--; if(currentMonth<0){currentMonth=11;currentYear--;} renderCalendar(); });
   document.getElementById('nextMonth').addEventListener('click', () => { currentMonth++; if(currentMonth>11){currentMonth=0;currentYear++;} renderCalendar(); });
 
-  // ── COLOR PICKERS ──
-  document.querySelectorAll('.color-opt').forEach(el => {
-    el.addEventListener('click', function() {
-      this.closest('.color-opts').querySelectorAll('.color-opt').forEach(c => c.classList.remove('sel'));
-      this.classList.add('sel');
-    });
-  });
-
-  // ── SAVE EVENT (Supabase) ──
+  // ════════════════════════════════════
+  // SAVE / UPDATE EVENT (Supabase)
+  // ════════════════════════════════════
   document.getElementById('saveEvent').addEventListener('click', async () => {
     const name = document.getElementById('eventName').value.trim();
-    const date = document.getElementById('eventDate').value;
-    const time = document.getElementById('eventTime').value;
-    const colorEl = document.querySelector('#eventColors .sel') || document.querySelector('#eventColors .color-opt');
-    const color = colorEl ? colorEl.dataset.c : '#a78bfa';
+    const location = document.getElementById('eventLocation').value.trim();
+    const date = getPickedDate();
+    const time = getPickedTime();
+    const colorEl = document.querySelector('#eventColorPicker .selected');
+    const color = colorEl ? colorEl.dataset.color : '#a78bfa';
+    const editId = document.getElementById('editingEventId').value;
     if (!name || !date) return;
-    const { data, error } = await supabaseClient.from('events').insert([{ name, date, time, color, user_id: user.id }]).select();
-    if (data) { events.push(data[0]); document.getElementById('eventModalOverlay').classList.remove('active'); renderCalendar(); }
-    if (error) console.error(error);
+
+    if (editId) {
+      // UPDATE
+      const { data, error } = await supabaseClient.from('events')
+        .update({ name, date, time, color, location }).eq('id', editId).select();
+      if (data) {
+        events = events.map(e => e.id == editId ? data[0] : e);
+        document.getElementById('eventModalOverlay').classList.remove('active');
+        renderCalendar();
+      }
+      if (error) console.error(error);
+    } else {
+      // INSERT
+      const { data, error } = await supabaseClient.from('events')
+        .insert([{ name, date, time, color, location, user_id: user.id }]).select();
+      if (data) {
+        events.push(data[0]);
+        document.getElementById('eventModalOverlay').classList.remove('active');
+        renderCalendar();
+      }
+      if (error) console.error(error);
+    }
   });
 
-  // ── SAVE TASK (Supabase) ──
+  // Delete from edit modal
+  document.getElementById('deleteEditingEvent').addEventListener('click', async () => {
+    const id = document.getElementById('editingEventId').value;
+    if (!id) return;
+    await supabaseClient.from('events').delete().eq('id', id);
+    events = events.filter(e => e.id != id);
+    document.getElementById('eventModalOverlay').classList.remove('active');
+    renderCalendar();
+  });
+
+  // ════════════════════════════════════
+  // SAVE TASK (Supabase)
+  // ════════════════════════════════════
   document.getElementById('saveTask').addEventListener('click', async () => {
     const name = document.getElementById('taskName').value.trim();
     const start = document.getElementById('taskStart').value;
     const end = document.getElementById('taskEnd').value || start;
-    const colorEl = document.querySelector('#taskColors .sel') || document.querySelector('#taskColors .color-opt');
-    const color = colorEl ? colorEl.dataset.c : '#f472b6';
+    const colorEl = document.querySelector('#taskColorPicker .selected');
+    const color = colorEl ? colorEl.dataset.color : '#f472b6';
     if (!name || !start) return;
-    const { data, error } = await supabaseClient.from('tasks').insert([{ name, start, end, color, user_id: user.id }]).select();
-    if (data) { tasks.push(data[0]); document.getElementById('taskModalOverlay').classList.remove('active'); renderCalendar(); }
+    const { data, error } = await supabaseClient.from('tasks')
+      .insert([{ name, start, end, color, user_id: user.id }]).select();
+    if (data) {
+      tasks.push(data[0]);
+      document.getElementById('taskModalOverlay').classList.remove('active');
+      renderCalendar();
+    }
     if (error) console.error(error);
   });
 
   // ── DELETE (Supabase) ──
   function delEvent(id) {
-    if (!confirm('Remove this event?')) return;
     supabaseClient.from('events').delete().eq('id', id).then(() => {
       events = events.filter(e => e.id != id); renderCalendar();
     });
@@ -1308,7 +1532,47 @@
     events = []; tasks = []; renderCalendar();
   });
 
-    fetchDailyQuote();
+  // ── DAILY ALCHEMY QUOTE ──
+  // ── Edge Function URL — replace YOUR_PROJECT_REF with your Supabase project ref ──
+  const EDGE_FUNCTION_URL = 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/daily-alchemy';
+
+  async function fetchDailyQuote() {
+    const today = new Date().toDateString();
+    const cacheKey = 'amethy_quote_' + today;
+
+    // Check cache first (no API call needed today if already fetched)
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) { setQuote(cached); return; }
+    } catch(e) {}
+
+    setQuote('<span style="color:var(--text-dim);font-size:10px;letter-spacing:1px">✦   consulting the stars   ✦</span>');
+
+    try {
+      const res = await fetch(EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Pass the user's Supabase session token for auth (optional but good practice)
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        },
+        body: JSON.stringify({ date: today }),
+      });
+      const data = await res.json();
+      const text = data.quote || '✶ The stars keep their counsel today. ✶';
+      try { localStorage.setItem(cacheKey, text); } catch(e) {}
+      setQuote(text);
+    } catch(e) {
+      setQuote('✶ When the Moon conjuncts Saturn, patience becomes the philosopher’s stone. ✶');
+    }
+  }
+
+  function setQuote(text) {
+    const el = document.getElementById('alchemyContent');
+    if (el) el.innerHTML = `<span style="font-family:'Cinzel',serif;font-size:10.5px;line-height:1.8;color:#d4c8f0;letter-spacing:0.8px;font-style:italic;text-align:center;display:block;">${text}</span>`;
+  }
+
+  fetchDailyQuote();
 </script>
 </body>
 </html>
