@@ -356,7 +356,6 @@
   @keyframes stormPulse {
     0%   { opacity: 0.9; }
     100% { opacity: 1; }
-  }
     100% { box-shadow:inset -32px -20px 48px rgba(0,0,0,0.55),inset 12px 9px 32px rgba(215,168,245,0.12),0 0 120px rgba(185,100,230,0.7),0 0 240px rgba(135,60,180,0.42); }
   }
   .planet-storm::before {
@@ -979,7 +978,7 @@
         </div>
       </div>
       <div class="panel">
-        <div class="panel-title"><span class="dot"></span>TODAY</div>
+        <div class="panel-title"><span class="dot"></span>TODAY <button id="quickAddForDay" onclick="openEventModal(null, this.dataset.date)" style="display:none;margin-left:auto;font-family:'Orbitron';font-size:8px;letter-spacing:1px;background:rgba(109,40,217,0.2);border:1px solid rgba(167,139,250,0.4);color:#c4b5fd;padding:3px 8px;cursor:pointer">+ ADD</button></div>
         <div class="selected-info" id="todayInfo"></div>
         <div id="todayEvents" class="event-list"><div class="empty-state">// 暂无日程 //</div></div>
       </div>
@@ -1213,24 +1212,37 @@
         }
       });
 
-      cell.addEventListener('click', () => showDayPanel(dateStr));
+      // Single click → show day panel; double-click → open add event modal for that date
+      cell.addEventListener('click', (e) => {
+        if (e.target.classList.contains('event-chip') || e.target.closest('.event-chip')) return;
+        showDayPanel(dateStr);
+      });
+      cell.addEventListener('dblclick', (e) => {
+        if (e.target.classList.contains('event-chip') || e.target.closest('.event-chip')) return;
+        openEventModal(null, dateStr);
+      });
       grid.appendChild(cell);
     }
     renderSidebar();
   }
 
+  let _selectedDateStr = null;
+
   function showDayPanel(dateStr) {
+    _selectedDateStr = dateStr;
     document.querySelectorAll('.day-cell').forEach(c => c.classList.remove('selected'));
     document.querySelector(`.day-cell[data-date="${dateStr}"]`)?.classList.add('selected');
     const d = parseDate(dateStr);
     document.getElementById('todayInfo').textContent =
       `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}`;
+    // Show quick-add button
+    const addBtn = document.getElementById('quickAddForDay');
+    if (addBtn) { addBtn.style.display = 'inline-block'; addBtn.dataset.date = dateStr; }
     const container = document.getElementById('todayEvents');
     container.innerHTML = '';
     const dayEvents = events.filter(e => e.date === dateStr);
     if (!dayEvents.length) { container.innerHTML='<div class="empty-state">// 暂无日程 //</div>'; }
     else dayEvents.forEach(ev => container.appendChild(createEventItem(ev)));
-    document.getElementById('eventDate').value = dateStr;
   }
 
   function createEventItem(ev) {
@@ -1289,70 +1301,59 @@
   // ════════════════════════════════════
   // SCROLL PICKER
   // ════════════════════════════════════
-  // ── SCROLL PICKER: snap-based, no reflow during scroll ──
+  // ── SCROLL PICKER: snap-based, AbortController for clean listener removal ──
   const ITEM_H = 36;
+  const _scrollAbort = {};  // keyed by col id
 
-  function buildScrollCol(el, items, selectedVal) {
-    // Remove old scroll listener by cloning
-    const fresh = el.cloneNode(false);
-    el.parentNode.replaceChild(fresh, el);
-    el = fresh;
-    // Re-cache by ID (cloneNode loses reference)
-    // el.id is preserved
+  function buildScrollCol(elOrId, items, selectedVal) {
+    const id = typeof elOrId === 'string' ? elOrId : elOrId.id;
+    const el = document.getElementById(id);
 
+    // Cancel previous scroll listener cleanly
+    if (_scrollAbort[id]) { _scrollAbort[id].abort(); }
+    _scrollAbort[id] = new AbortController();
+    const signal = _scrollAbort[id].signal;
+
+    // Rebuild DOM
     const frag = document.createDocumentFragment();
-    // top spacer
-    const t = document.createElement('div');
-    t.className = 'scroll-item'; t.style.visibility = 'hidden'; frag.appendChild(t);
-
+    const spacer = () => { const d = document.createElement('div'); d.className='scroll-item'; d.style.visibility='hidden'; return d; };
+    frag.appendChild(spacer());
     items.forEach((item, idx) => {
       const d = document.createElement('div');
       d.className = 'scroll-item';
       d.textContent = item.label;
-      d.dataset.val = item.val;
+      d.dataset.val = String(item.val);
       d.dataset.idx = idx;
       frag.appendChild(d);
     });
-
-    // bottom spacer
-    const b = document.createElement('div');
-    b.className = 'scroll-item'; b.style.visibility = 'hidden'; frag.appendChild(b);
-
+    frag.appendChild(spacer());
+    el.innerHTML = '';
     el.appendChild(frag);
 
-    // Find selected index
+    // Scroll to selected (after DOM paint)
     const selIdx = items.findIndex(i => String(i.val) === String(selectedVal));
     const targetIdx = selIdx >= 0 ? selIdx : 0;
+    requestAnimationFrame(() => {
+      el.scrollTop = targetIdx * ITEM_H;
+    });
 
-    // Set active class immediately
-    const allItems = el.querySelectorAll('.scroll-item[data-val]');
-    allItems[targetIdx]?.classList.add('active');
-
-    // Jump to position (no animation, no reflow loop)
-    el.scrollTop = targetIdx * ITEM_H;
-
-    // Debounced scroll handler — only fires after user stops scrolling
+    // Debounced scroll: snap + update active
     let scrollTimer = null;
     el.addEventListener('scroll', () => {
-      if (scrollTimer) return; // skip intermediate frames
+      if (scrollTimer) clearTimeout(scrollTimer);
       scrollTimer = setTimeout(() => {
         scrollTimer = null;
         const idx = Math.round(el.scrollTop / ITEM_H);
-        const items2 = el.querySelectorAll('.scroll-item[data-val]');
-        items2.forEach((it, i) => it.classList.toggle('active', i === idx));
-        // Snap to exact position
+        el.querySelectorAll('.scroll-item[data-val]').forEach((it, i) => it.classList.toggle('active', i === idx));
         el.scrollTop = idx * ITEM_H;
-        // Only update day count when month/year col settles
-        if (el.id === 'monthCol' || el.id === 'yearCol') updateDayCount();
+        if (id === 'monthCol' || id === 'yearCol') updateDayCount();
       }, 80);
-    }, { passive: true });
+    }, { passive: true, signal });
 
     // Click to jump
     el.querySelectorAll('.scroll-item[data-val]').forEach((item, idx) => {
-      item.addEventListener('click', () => { el.scrollTop = idx * ITEM_H; });
+      item.addEventListener('click', () => { el.scrollTop = idx * ITEM_H; }, { signal });
     });
-
-    return el; // return new element ref
   }
 
   function getScrollVal(colId) {
@@ -1386,24 +1387,25 @@
 
     const years  = Array.from({length:16}, (_,i) => ({val:2020+i, label:String(2020+i)}));
     const months = Array.from({length:12}, (_,i) => ({val:i+1, label:String(i+1).padStart(2,'0')}));
-    const daysInMonth = new Date(selYear, selMonth, 0).getDate();
-    const days = Array.from({length:31}, (_,i) => ({val:i+1, label:String(i+1).padStart(2,'0')}));
+    const days   = Array.from({length:31}, (_,i) => ({val:i+1, label:String(i+1).padStart(2,'0')}));
 
-    buildScrollCol(document.getElementById('yearCol'),  years,  selYear);
-    buildScrollCol(document.getElementById('monthCol'), months, selMonth);
-    buildScrollCol(document.getElementById('dayCol'),   days,   selDay);
-    // hide days beyond current month
+    buildScrollCol('yearCol',  years,  selYear);
+    buildScrollCol('monthCol', months, selMonth);
+    buildScrollCol('dayCol',   days,   selDay);
     updateDayCount();
   }
 
   function initTimePicker(timeStr) {
+    const now = new Date();
     const parts = (timeStr || '').split(':');
-    const selH = parts[0] ? parseInt(parts[0]) : 9;
-    const selM = parts[1] ? Math.round(parseInt(parts[1])/5)*5 : 0;
+    // If editing existing event, use its time; otherwise default to current hour, rounded minute
+    const selH = parts[0] !== undefined && timeStr ? parseInt(parts[0]) : now.getHours();
+    const rawM = parts[1] !== undefined && timeStr ? parseInt(parts[1]) : now.getMinutes();
+    const selM = Math.round(rawM / 5) * 5 % 60;
     const hours   = Array.from({length:24}, (_,i) => ({val:i,   label:String(i).padStart(2,'0')}));
     const minutes = Array.from({length:12}, (_,i) => ({val:i*5, label:String(i*5).padStart(2,'0')}));
-    buildScrollCol(document.getElementById('hourCol'),   hours,   selH);
-    buildScrollCol(document.getElementById('minuteCol'), minutes, selM);
+    buildScrollCol('hourCol',   hours,   selH);
+    buildScrollCol('minuteCol', minutes, selM);
   }
 
   function getPickedDate() {
@@ -1421,7 +1423,7 @@
   // ════════════════════════════════════
   // MODAL OPEN / RESET / EDIT
   // ════════════════════════════════════
-  function openEventModal(ev) {
+  function openEventModal(ev, presetDate) {
     const isEdit = !!ev;
     document.getElementById('eventModalTitle').textContent = isEdit ? '// EDIT EVENT //' : '// ADD EVENT //';
     document.getElementById('editingEventId').value = isEdit ? ev.id : '';
@@ -1434,8 +1436,11 @@
       o.classList.toggle('selected', isEdit ? o.dataset.color === ev.color : i === 0);
     });
 
-    initDatePicker(isEdit ? ev.date : getPickedDate() || toDateStr(currentYear, currentMonth, new Date().getDate()));
-    initTimePicker(isEdit ? ev.time : '');
+    // date: editing → use event date; new with preset → use preset; new → today
+    const dateForPicker = isEdit ? ev.date : (presetDate || _selectedDateStr || toDateStr(currentYear, currentMonth, new Date().getDate()));
+    initDatePicker(dateForPicker);
+    // time: editing → use event time (may be empty string); new → current time
+    initTimePicker(isEdit ? (ev.time || '') : '');
 
     document.getElementById('eventModalOverlay').classList.add('active');
   }
@@ -1464,27 +1469,41 @@
     const editId = document.getElementById('editingEventId').value;
     if (!name || !date) return;
 
+    const btn = document.getElementById('saveEvent');
+    btn.textContent = '...'; btn.disabled = true;
+
     if (editId) {
-      // UPDATE
+      // UPDATE — must include user_id in filter for RLS
       const { data, error } = await supabaseClient.from('events')
-        .update({ name, date, time, color, location }).eq('id', editId).select();
-      if (data) {
-        events = events.map(e => e.id == editId ? data[0] : e);
+        .update({ name, date, time, color, location })
+        .eq('id', editId).eq('user_id', user.id).select();
+      if (data && data.length > 0) {
+        events = events.map(e => String(e.id) === String(editId) ? data[0] : e);
         document.getElementById('eventModalOverlay').classList.remove('active');
         renderCalendar();
+      } else if (error) {
+        console.error('Update error:', error);
+        alert('Update failed: ' + (error.message || 'Unknown error'));
+      } else {
+        // data is empty array — RLS blocked or id mismatch, refetch to be safe
+        await fetchAllData();
+        document.getElementById('eventModalOverlay').classList.remove('active');
       }
-      if (error) console.error(error);
     } else {
       // INSERT
       const { data, error } = await supabaseClient.from('events')
         .insert([{ name, date, time, color, location, user_id: user.id }]).select();
-      if (data) {
+      if (data && data.length > 0) {
         events.push(data[0]);
         document.getElementById('eventModalOverlay').classList.remove('active');
         renderCalendar();
+      } else if (error) {
+        console.error('Insert error:', error);
+        alert('Save failed: ' + (error.message || 'Unknown error'));
       }
-      if (error) console.error(error);
     }
+
+    btn.textContent = 'CONFIRM'; btn.disabled = false;
   });
 
   // Delete from edit modal
