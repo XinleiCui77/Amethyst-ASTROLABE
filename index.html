@@ -356,7 +356,6 @@
   @keyframes stormPulse {
     0%   { opacity: 0.9; }
     100% { opacity: 1; }
-    100% { box-shadow:inset -32px -20px 48px rgba(0,0,0,0.55),inset 12px 9px 32px rgba(215,168,245,0.12),0 0 120px rgba(185,100,230,0.7),0 0 240px rgba(135,60,180,0.42); }
   }
   .planet-storm::before {
     content:''; position:absolute; inset:0; border-radius:50%;
@@ -1002,17 +1001,17 @@
     <input type="hidden" id="editingEventId">
 
     <div class="form-group">
-      <label class="form-label">日程名称</label>
+      <label class="form-label" for="eventName">日程名称</label>
       <input type="text" class="form-input" id="eventName" placeholder="输入日程名称...">
     </div>
 
     <div class="form-group">
-      <label class="form-label">地点（可选）</label>
+      <label class="form-label" for="eventLocation">地点（可选）</label>
       <input type="text" class="form-input" id="eventLocation" placeholder="输入地点...">
     </div>
 
     <div class="form-group">
-      <label class="form-label">日期</label>
+      <label class="form-label" for="datePicker">日期</label>
       <div class="scroll-picker-row" id="datePicker"><div class="scroll-fade-bottom"></div>
         <div class="scroll-col" id="yearCol"></div>
         <div class="scroll-col-sep">—</div>
@@ -1023,7 +1022,7 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">时间（可选）</label>
+      <label class="form-label" for="timePicker">时间（可选）</label>
       <div class="scroll-picker-row" id="timePicker"><div class="scroll-fade-bottom"></div>
         <div class="scroll-col" id="hourCol"></div>
         <div class="scroll-col-sep">:</div>
@@ -1032,7 +1031,7 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">颜色标签</label>
+      <label class="form-label" for="eventColorPicker">颜色标签</label>
       <div class="color-picker" id="eventColorPicker">
         <div class="color-opt selected" style="background:#00f5ff" data-color="#00f5ff"></div>
         <div class="color-opt" style="background:#7b2fff" data-color="#7b2fff"></div>
@@ -1055,13 +1054,13 @@
   <div class="modal" style="border-color:var(--accent2);box-shadow:0 0 60px rgba(255,0,110,0.2)">
     <button class="modal-close" id="closeTaskModal">✕</button>
     <div class="modal-title" style="color:var(--accent2)">// ADD TASK //</div>
-    <div class="form-group"><label class="form-label">任务名称</label><input type="text" class="form-input" id="taskName" placeholder="输入任务名称..."></div>
+    <div class="form-group"><label class="form-label" for="taskName">任务名称</label><input type="text" class="form-input" id="taskName" placeholder="输入任务名称..."></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">开始日期</label><input type="date" class="form-input" id="taskStart"></div>
-      <div class="form-group"><label class="form-label">截止日期 DDL</label><input type="date" class="form-input" id="taskEnd"></div>
+      <div class="form-group"><label class="form-label" for="taskStart">开始日期</label><input type="date" class="form-input" id="taskStart"></div>
+      <div class="form-group"><label class="form-label" for="taskEnd">截止日期 DDL</label><input type="date" class="form-input" id="taskEnd"></div>
     </div>
     <div class="form-group">
-      <label class="form-label">颜色标签</label>
+      <label class="form-label" for="taskColorPicker">颜色标签</label>
       <div class="color-picker" id="taskColorPicker">
         <div class="color-opt selected" style="background:#ff006e" data-color="#ff006e"></div>
         <div class="color-opt" style="background:#ff7b00" data-color="#ff7b00"></div>
@@ -1075,13 +1074,32 @@
   </div>
 </div>
 
+
 <script>
+  // ── VISIBLE DEBUG HELPER ──
+  function dbg(...args) {
+    console.log(...args);
+    const panel = document.getElementById('debugPanel');
+    const log = document.getElementById('debugLog');
+    if (!panel || !log) return;
+    panel.style.display = 'block';
+    const line = document.createElement('div');
+    line.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+    line.style.padding = '2px 0';
+    line.textContent = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    log.appendChild(line);
+    panel.scrollTop = panel.scrollHeight;
+  }
+
   let currentDate = new Date();
   let currentYear = currentDate.getFullYear();
   let currentMonth = currentDate.getMonth();
 
-  let events = JSON.parse(localStorage.getItem('chrono_events') || '[]');
-  let tasks  = JSON.parse(localStorage.getItem('chrono_tasks')  || '[]');
+  // Data lives in Supabase — never use localStorage for events/tasks
+  let events = [];
+  let tasks  = [];
+  // Clear any stale local data that could interfere
+  try { localStorage.removeItem('chrono_events'); localStorage.removeItem('chrono_tasks'); } catch(e) {}
 
   const MONTHS_ZH = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
   
@@ -1194,7 +1212,13 @@
         chip.className = 'event-chip';
         chip.style.borderColor = ev.color;
         chip.style.color = ev.color;
+        chip.style.cursor = 'pointer';
         chip.textContent = (ev.time ? ev.time+' ':'')+ev.name;
+        chip.addEventListener('click', e => {
+          e.stopPropagation();
+          const fresh = events.find(x => String(x.id) === String(ev.id));
+          if (fresh) openEventModal(fresh);
+        });
         cell.appendChild(chip);
       });
 
@@ -1212,15 +1236,8 @@
         }
       });
 
-      // Single click → show day panel; double-click → open add event modal for that date
-      cell.addEventListener('click', (e) => {
-        if (e.target.classList.contains('event-chip') || e.target.closest('.event-chip')) return;
-        showDayPanel(dateStr);
-      });
-      cell.addEventListener('dblclick', (e) => {
-        if (e.target.classList.contains('event-chip') || e.target.closest('.event-chip')) return;
-        openEventModal(null, dateStr);
-      });
+      cell.addEventListener('click', () => showDayPanel(dateStr));
+      cell.addEventListener('dblclick', () => openEventModal(null, dateStr));
       grid.appendChild(cell);
     }
     renderSidebar();
@@ -1248,9 +1265,15 @@
   function createEventItem(ev) {
     const el = document.createElement('div');
     el.className='event-item'; el.style.borderColor=ev.color;
+    el.dataset.evid = String(ev.id);
     const loc = ev.location ? `<span style="font-size:9px;opacity:0.6"> · 📍${ev.location}</span>` : '';
     el.innerHTML=`<div class="event-item-info" style="cursor:pointer"><div class="event-item-name" style="color:${ev.color}">${ev.name}${loc}</div><div class="event-item-meta">${ev.date}${ev.time?' · '+ev.time:''}</div></div><button class="event-item-del" data-id="${ev.id}" title="Delete">✕</button>`;
-    el.querySelector('.event-item-info').addEventListener('click', () => openEventModal(ev));
+    el.querySelector('.event-item-info').addEventListener('click', () => {
+      // Always look up fresh from events array by id
+      const fresh = events.find(e => String(e.id) === String(ev.id));
+      //dbg('[EDIT] id:', ev.id, 'fresh:', fresh);
+      if (fresh) openEventModal(fresh);
+    });
     el.querySelector('.event-item-del').addEventListener('click', e => { e.stopPropagation(); delEvent(ev.id); });
     return el;
   }
@@ -1426,7 +1449,9 @@
   function openEventModal(ev, presetDate) {
     const isEdit = !!ev;
     document.getElementById('eventModalTitle').textContent = isEdit ? '// EDIT EVENT //' : '// ADD EVENT //';
-    document.getElementById('editingEventId').value = isEdit ? ev.id : '';
+    const idToSet = isEdit ? String(ev.id) : '';
+    document.getElementById('editingEventId').value = idToSet;
+    //dbg('[MODAL] isEdit:', isEdit, 'setting editingEventId to:', idToSet);
     document.getElementById('eventName').value = isEdit ? ev.name : '';
     document.getElementById('eventLocation').value = isEdit ? (ev.location || '') : '';
     document.getElementById('deleteEditingEvent').style.display = isEdit ? 'inline-block' : 'none';
@@ -1467,39 +1492,55 @@
     const colorEl = document.querySelector('#eventColorPicker .selected');
     const color = colorEl ? colorEl.dataset.color : '#a78bfa';
     const editId = document.getElementById('editingEventId').value;
+    //dbg('[SAVE] editId:', JSON.stringify(editId), '| name:', name, '| date:', date);
     if (!name || !date) return;
 
     const btn = document.getElementById('saveEvent');
     btn.textContent = '...'; btn.disabled = true;
 
     if (editId) {
-      // UPDATE — must include user_id in filter for RLS
-      const { data, error } = await supabaseClient.from('events')
+      // ── DEBUG: log exactly what we're sending ──
+      //dbg('[UPDATE] editId:', editId, 'user.id:', user?.id);
+      //dbg('[UPDATE] payload:', { name, date, time, color, location });
+
+      const { data, error, status, statusText } = await supabaseClient
+        .from('events')
         .update({ name, date, time, color, location })
-        .eq('id', editId).eq('user_id', user.id).select();
-      if (data && data.length > 0) {
+        .eq('id', editId)
+        .select();
+
+      //dbg('[UPDATE] status:', status, statusText);
+      //dbg('[UPDATE] data:', data);
+      //dbg('[UPDATE] error:', error);
+
+      if (error) {
+        alert('❌ Update failed\n' + error.message + '\n\nCheck console for details.');
+      } else if (data && data.length > 0) {
+        // Success — update local array
         events = events.map(e => String(e.id) === String(editId) ? data[0] : e);
         document.getElementById('eventModalOverlay').classList.remove('active');
         renderCalendar();
-      } else if (error) {
-        console.error('Update error:', error);
-        alert('Update failed: ' + (error.message || 'Unknown error'));
       } else {
-        // data is empty array — RLS blocked or id mismatch, refetch to be safe
+        // Empty result — likely RLS is blocking (no error but no rows updated)
+        dbg('[UPDATE] Empty result — possible RLS policy blocking update');
+        alert('⚠️ 修改未生效\n\n可能原因：Supabase RLS 策略未允许 UPDATE。\n请在 Supabase Dashboard → Authentication → Policies 里检查 events 表是否有 UPDATE 策略。');
+        // Still refetch so UI is in sync
         await fetchAllData();
         document.getElementById('eventModalOverlay').classList.remove('active');
       }
     } else {
       // INSERT
-      const { data, error } = await supabaseClient.from('events')
-        .insert([{ name, date, time, color, location, user_id: user.id }]).select();
-      if (data && data.length > 0) {
+      const { data, error } = await supabaseClient
+        .from('events')
+        .insert([{ name, date, time, color, location, user_id: user.id }])
+        .select();
+
+      if (error) {
+        alert('❌ Insert failed\n' + error.message);
+      } else if (data && data.length > 0) {
         events.push(data[0]);
         document.getElementById('eventModalOverlay').classList.remove('active');
         renderCalendar();
-      } else if (error) {
-        console.error('Insert error:', error);
-        alert('Save failed: ' + (error.message || 'Unknown error'));
       }
     }
 
@@ -1650,5 +1691,23 @@
 
   fetchDailyQuote();
 </script>
+
+<!-- DEBUG PANEL -->
+<div id="debugPanel" style="position:fixed;bottom:0;left:0;right:0;z-index:99999;background:rgba(0,0,0,0.92);border-top:1px solid #a78bfa;padding:8px 16px;font-family:monospace;font-size:11px;color:#7ee8c8;max-height:120px;overflow-y:auto;display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+    <span style="color:#fbbf24;letter-spacing:2px;font-size:10px">DEBUG LOG</span>
+    <button onclick="document.getElementById('debugPanel').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:14px">✕</button>
+  </div>
+  <div id="debugLog"></div>
+</div>
+
+
+<div id="debugPanel" style="position:fixed;bottom:0;left:0;right:0;z-index:99999;background:rgba(0,0,0,0.93);border-top:2px solid #a78bfa;padding:8px 16px;font-family:monospace;font-size:11px;color:#7ee8c8;max-height:130px;overflow-y:auto;display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+    <span style="color:#fbbf24;letter-spacing:2px;font-size:10px">✦ DEBUG LOG</span>
+    <button onclick="document.getElementById('debugPanel').style.display='none';document.getElementById('debugLog').innerHTML=''" style="background:none;border:none;color:#888;cursor:pointer;font-size:13px">✕ close</button>
+  </div>
+  <div id="debugLog"></div>
+</div>
 </body>
 </html>
