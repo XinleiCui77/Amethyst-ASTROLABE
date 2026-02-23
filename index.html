@@ -1054,13 +1054,16 @@
   <div class="modal" style="border-color:var(--accent2);box-shadow:0 0 60px rgba(255,0,110,0.2)">
     <button class="modal-close" id="closeTaskModal">✕</button>
     <div class="modal-title" style="color:var(--accent2)">// ADD TASK //</div>
-    <div class="form-group"><label class="form-label" for="taskName">任务名称</label><input type="text" class="form-input" id="taskName" placeholder="输入任务名称..."></div>
+
+    <input type="hidden" id="editingTaskId">
+
+    <div class="form-group"><label class="form-label" for="taskName">Task Name</label><input type="text" class="form-input" id="taskName" placeholder="Please enter the task name..."></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label" for="taskStart">开始日期</label><input type="date" class="form-input" id="taskStart"></div>
-      <div class="form-group"><label class="form-label" for="taskEnd">截止日期 DDL</label><input type="date" class="form-input" id="taskEnd"></div>
+      <div class="form-group"><label class="form-label" for="taskStart">Start Date</label><input type="date" class="form-input" id="taskStart"></div>
+      <div class="form-group"><label class="form-label" for="taskEnd">End Date or DDL</label><input type="date" class="form-input" id="taskEnd"></div>
     </div>
     <div class="form-group">
-      <label class="form-label" for="taskColorPicker">颜色标签</label>
+      <label class="form-label" for="taskColorPicker">color category</label>
       <div class="color-picker" id="taskColorPicker">
         <div class="color-opt selected" style="background:#ff006e" data-color="#ff006e"></div>
         <div class="color-opt" style="background:#ff7b00" data-color="#ff7b00"></div>
@@ -1232,6 +1235,11 @@
           bar.style.color = '#000';
           bar.style.fontWeight = '600';
           bar.textContent = isStart ? ('⬤ '+task.name) : isEnd ? (task.name+' ✕') : '─────';
+          bar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const freshTask = tasks.find(x => String(x.id) === String(task.id));
+            if (freshTask) openTaskModal(freshTask);
+          });
           cell.appendChild(bar);
         }
       });
@@ -1293,8 +1301,15 @@
         const start=parseDate(task.start), end=parseDate(task.end), now=new Date();
         const total=end-start, elapsed=Math.min(now-start,total);
         const progress=total>0?Math.max(0,Math.min(100,(elapsed/total)*100)):100;
-        el.innerHTML=`<button class="task-item-del" data-id="${task.id}">✕</button><div class="task-item-name" style="color:${task.color}">${task.name}</div><div class="task-item-dates">${task.start} → DDL ${task.end}</div><div class="task-progress"><div class="task-progress-fill" style="width:${progress}%;background:${task.color}"></div></div>`;
-        el.querySelector('.task-item-del').addEventListener('click', e => { e.stopPropagation(); tasks=tasks.filter(x=>x.id!==task.id); save(); renderCalendar(); });
+        el.innerHTML=`
+          <button class="task-item-del" data-id="${task.id}">✕</button>
+          <div style="cursor:pointer;" onclick="openTaskModalById('${task.id}')">
+            <div class="task-item-name" style="color:${task.color}">${task.name}</div>
+            <div class="task-item-dates">${task.start} → DDL ${task.end}</div>
+          </div>
+          <div class="task-progress"><div class="task-progress-fill" style="width:${progress}%;background:${task.color}"></div></div>
+        `;
+        el.querySelector('.task-item-del').addEventListener('click', e => { e.stopPropagation(); delTask(task.id); });
         taskEl.appendChild(el);
       });
     }
@@ -1472,10 +1487,6 @@
 
   document.getElementById('openEventModal').addEventListener('click', () => openEventModal(null));
   document.getElementById('closeEventModal').addEventListener('click', () => document.getElementById('eventModalOverlay').classList.remove('active'));
-  document.getElementById('openTaskModal').addEventListener('click', () => {
-    document.getElementById('taskName').value = '';
-    document.getElementById('taskModalOverlay').classList.add('active');
-  });
   document.getElementById('closeTaskModal').addEventListener('click', () => document.getElementById('taskModalOverlay').classList.remove('active'));
 
   document.getElementById('prevMonth').addEventListener('click', () => { currentMonth--; if(currentMonth<0){currentMonth=11;currentYear--;} renderCalendar(); });
@@ -1558,23 +1569,107 @@
   });
 
   // ════════════════════════════════════
-  // SAVE TASK (Supabase)
+  // 任务系统：打开 / 重置 / 编辑
   // ════════════════════════════════════
-  document.getElementById('saveTask').addEventListener('click', async () => {
+  // 这个函数供侧边栏和日历网格调用
+  window.openTaskModalById = (id) => {
+    const fresh = tasks.find(x => String(x.id) === String(id));
+    if (fresh) openTaskModal(fresh);
+  };
+
+  // 核心：打开弹窗并填充数据
+  function openTaskModal(task = null) {
+    const isEdit = !!task;
+    document.getElementById('taskModalTitle').textContent = isEdit ? '// EDIT TASK //' : '// ADD TASK //';
+    
+    // 记录正在编辑的任务ID，如果是新建就是空
+    document.getElementById('editingTaskId').value = isEdit ? task.id : '';
+    document.getElementById('taskName').value = isEdit ? task.name : '';
+    
+    // 日期：编辑时用原有日期；新建时用今天
+    const today = toDateStr(currentYear, currentMonth, currentDate.getDate());
+    document.getElementById('taskStart').value = isEdit ? task.start : today;
+    document.getElementById('taskEnd').value = isEdit ? task.end : today;
+
+    // 删除按钮：只有在编辑已有任务时才显示
+    const delBtn = document.getElementById('deleteEditingTask');
+    if (delBtn) delBtn.style.display = isEdit ? 'inline-block' : 'none';
+
+    // 颜色标签高亮
+    document.getElementById('taskColorPicker').querySelectorAll('.color-opt').forEach((o, i) => {
+      o.classList.toggle('selected', isEdit ? o.dataset.color === task.color : i === 0);
+    });
+
+    document.getElementById('taskModalOverlay').classList.add('active');
+  }
+
+  // 绑定头部右上角的 "+ 任务" 按钮
+  document.getElementById('openTaskModal').addEventListener('click', () => openTaskModal(null));
+
+
+  // ════════════════════════════════════
+  // 任务系统：保存 (新建 Insert 或 更新 Update)
+  // ════════════════════════════════════
+  // 先移除旧的监听器，防止重复绑定（保险起见）
+  const oldSaveTaskBtn = document.getElementById('saveTask');
+  const newSaveTaskBtn = oldSaveTaskBtn.cloneNode(true);
+  oldSaveTaskBtn.parentNode.replaceChild(newSaveTaskBtn, oldSaveTaskBtn);
+
+  newSaveTaskBtn.addEventListener('click', async () => {
     const name = document.getElementById('taskName').value.trim();
     const start = document.getElementById('taskStart').value;
     const end = document.getElementById('taskEnd').value || start;
     const colorEl = document.querySelector('#taskColorPicker .selected');
     const color = colorEl ? colorEl.dataset.color : '#f472b6';
+    
+    // 读取隐藏域里的 ID，看是不是在编辑
+    const editId = document.getElementById('editingTaskId').value;
+    
     if (!name || !start) return;
-    const { data, error } = await supabaseClient.from('tasks')
-      .insert([{ name, start, end, color, user_id: user.id }]).select();
-    if (data) {
-      tasks.push(data[0]);
-      document.getElementById('taskModalOverlay').classList.remove('active');
-      renderCalendar();
+
+    newSaveTaskBtn.textContent = '...'; 
+    newSaveTaskBtn.disabled = true;
+
+    if (editId) {
+      // 🔮 存在 ID：执行修改 (UPDATE)
+      const { data, error } = await supabaseClient.from('tasks')
+        .update({ name, start, end, color })
+        .eq('id', editId).select();
+        
+      if (data && data.length > 0) {
+        tasks = tasks.map(t => String(t.id) === String(editId) ? data[0] : t);
+        document.getElementById('taskModalOverlay').classList.remove('active');
+        renderCalendar();
+      } else if (error) {
+        alert('Update failed: ' + error.message);
+      }
+    } else {
+      // 🔮 不存在 ID：执行新增 (INSERT)
+      const { data, error } = await supabaseClient.from('tasks')
+        .insert([{ name, start, end, color, user_id: user.id }]).select();
+        
+      if (data && data.length > 0) {
+        tasks.push(data[0]);
+        document.getElementById('taskModalOverlay').classList.remove('active');
+        renderCalendar();
+      } else if (error) {
+        alert('Insert failed: ' + error.message);
+      }
     }
-    if (error) console.error(error);
+    newSaveTaskBtn.textContent = 'CONFIRM'; 
+    newSaveTaskBtn.disabled = false;
+  });
+
+  // 弹窗内部的删除按钮逻辑 (如果在 HTML 里加了那个删除按钮的话)
+  document.getElementById('deleteEditingTask')?.addEventListener('click', async () => {
+    const id = document.getElementById('editingTaskId').value;
+    if (!id) return;
+    if (!confirm('确定要删除这个任务吗？')) return;
+    
+    await supabaseClient.from('tasks').delete().eq('id', id);
+    tasks = tasks.filter(t => String(t.id) !== String(id));
+    document.getElementById('taskModalOverlay').classList.remove('active');
+    renderCalendar();
   });
 
   // ── DELETE (Supabase) ──
