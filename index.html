@@ -1053,7 +1053,7 @@
 <div class="modal-overlay" id="taskModalOverlay">
   <div class="modal" style="border-color:var(--accent2);box-shadow:0 0 60px rgba(255,0,110,0.2)">
     <button class="modal-close" id="closeTaskModal">✕</button>
-    <div class="modal-title" style="color:var(--accent2)">// ADD TASK //</div>
+    <div class="modal-title" id="taskModalTitle" style="color:var(--accent2)">// ADD TASK //</div>
 
     <input type="hidden" id="editingTaskId">
 
@@ -1073,7 +1073,10 @@
         <div class="color-opt" style="background:#00ff9d" data-color="#00ff9d"></div>
       </div>
     </div>
-    <div class="modal-actions"><button class="btn accent2" id="saveTask">CONFIRM</button></div>
+    <div class="modal-actions">
+      <button class="btn accent2" id="saveTask">CONFIRM</button>
+      <button class="btn" id="deleteEditingTask" style="display:none;background:rgba(255,0,110,0.1);border-color:rgba(255,0,110,0.4);color:#f9a8d4;margin-left:8px">DELETE</button>
+    </div>
   </div>
 </div>
 
